@@ -1,11 +1,5 @@
 # 콘서트 예약 서비스
 
-## 프로젝트 개요
-
-**콘서트 예약 서비스**는 사용자들이 콘서트 좌석을 예약하고 결제할 수 있는 시스템입니다. 
-
-이 서비스는 대기열 시스템을 도입하여 사용자들이 순서대로 예약을 진행할 수 있도록 하며, 좌석 예약 시 결제가 이루어지지 않더라도 일정 시간 동안 다른 사용자가 해당 좌석에 접근할 수 없도록 합니다.
-
 ---
 
 ## 목차
@@ -17,12 +11,16 @@
     - [좌석 예약 요청 API](#좌석-예약-요청-api)
     - [잔액 충전 / 조회 API](#잔액-충전--조회-api)
     - [결제 API](#결제-api)
+3. [프로젝트 구조](#3-프로젝트-구조)
+4. [API 명세](#4-api-명세)
+5. [ERD 설계 자료](#5-erd-설계-자료)
 
 ---
 
 ## 1. 시나리오 선정 및 프로젝트 Milestone
 
 ### 시나리오 선정
+
 - **콘서트 예약 서비스 구축**
     - 사용자 대기열 시스템 구현
     - 좌석 예약 및 임시 배정 기능 구현
@@ -81,237 +79,222 @@
 
 ## 2. 시나리오 요구사항 별 분석 자료
 
-### 유저 토큰 발급 API
-
-#### 기능 설명
-
-- 사용자가 서비스를 이용하기 위해 대기열 토큰을 발급받습니다.
-- 토큰에는 사용자의 UUID와 대기열 정보를 포함합니다.
-- 이후 모든 API 호출 시 이 토큰을 이용하여 대기열 검증을 통과해야 합니다.
-
-#### 흐름도 (Flow Chart)
-
 ```mermaid
 flowchart TD
-    A[사용자 요청] --> B{대기열에 사용자 존재?}
-    B -- 아니오 --> C[대기열에 사용자 추가]
-    C --> D[토큰 발급]
-    B -- 예 --> D[토큰 발급]
-    D --> E[응답 반환]
-```
 
-#### 시퀀스 다이어그램
+    subgraph 유저 토큰 발급 단계
+        A[사용자 요청] --> B[유저 토큰 발급 요청]
+        B --> C{대기열에 사용자 존재?}
+        C -- 아니오 --> D[대기열에 사용자 추가 후 토큰 발급]
+        C -- 예 --> E[기존 사용자 정보로 토큰 발급]
+    end
+
+    subgraph 예약 가능 정보 조회 단계
+        D --> F[예약 가능 날짜 조회 요청]
+        F --> G[예약 가능한 날짜 목록 반환]
+        G --> H[사용자가 특정 날짜 선택]
+        H --> I[선택한 날짜의 예약 가능한 좌석 조회]
+        I --> J[예약 가능 좌석 목록 반환]
+    end
+
+    subgraph 좌석 예약 단계
+        J --> K[사용자 좌석 예약 요청]
+        K --> L{좌석 예약 가능 여부 확인}
+        L -- 가능 --> M[좌석 임시 배정]
+        M --> N[5분 동안 임시 배정 유지]
+        L -- 불가능 --> O[예약 불가 응답]
+    end
+
+    subgraph 결제 및 확정 단계
+        N --> P[사용자 결제 요청]
+        P --> Q{사용자 잔액 확인}
+        Q -- 충분 --> R[결제 처리 및 잔액 차감]
+        R --> S[좌석 예약 확정 및 소유권 부여]
+        R --> T[대기열 토큰 만료]
+        S --> U[결제 완료 응답]
+        Q -- 부족 --> V[잔액 부족 응답]
+    end
+
+    subgraph 좌석 취소 및 해제 단계
+        N --> W[5분 후 결제 미완료 시]
+        W --> X[임시 배정 해제 및 좌석 상태 변경]
+    end
+```
 
 ```mermaid
 sequenceDiagram
-    participant User
-    participant API_Server
-    participant Queue_System
+participant User
+participant API_Server
+participant Queue_System
+participant Database
+participant Timer_Service
 
-    User->>API_Server: 토큰 발급 요청
-    API_Server->>Queue_System: 사용자 대기열 확인
-    Queue_System-->>API_Server: 대기열 정보
-    API_Server-->>User: 토큰 발급 및 대기열 정보 반환
-```
-
----
-
-### 예약 가능 날짜 / 좌석 API
-
-#### 기능 설명
-
-- 예약 가능한 날짜 목록을 조회합니다.
-- 선택한 날짜의 예약 가능한 좌석 정보를 조회합니다.
-
-#### 흐름도
-
-```mermaid
-flowchart TD
-    A[사용자 요청] --> B{날짜 정보 입력 여부}
-    B -- 아니오 --> C[예약 가능 날짜 목록 조회]
-    C --> D[응답 반환]
-    B -- 예 --> E[해당 날짜의 예약 가능 좌석 조회]
-    E --> D[응답 반환]
-```
-
-#### 시퀀스 다이어그램
-
-```mermaid
-sequenceDiagram
-    participant User
-    participant API_Server
-    participant Database
+    User->>API_Server: 유저 토큰 발급 요청
+    API_Server->>Queue_System: 대기열에 사용자 존재 확인
+    
+    alt 사용자 대기열 없음
+        Queue_System-->>API_Server: 대기열 추가 및 정보
+        API_Server-->>User: 토큰 발급 및 대기열 정보 반환
+    else 사용자 대기열 존재
+        Queue_System-->>API_Server: 사용자 대기열 정보
+        API_Server-->>User: 기존 토큰 반환
+    end
 
     User->>API_Server: 예약 가능 날짜 요청
     API_Server->>Database: 예약 가능 날짜 조회
-    Database-->>API_Server: 날짜 목록 반환
+    Database-->>API_Server: 예약 가능한 날짜 목록 반환
     API_Server-->>User: 날짜 목록 응답
 
     User->>API_Server: 특정 날짜의 좌석 정보 요청
-    API_Server->>Database: 해당 날짜의 예약 가능 좌석 조회
+    API_Server->>Database: 해당 날짜의 예약 가능한 좌석 조회
     Database-->>API_Server: 좌석 정보 반환
     API_Server-->>User: 좌석 정보 응답
-```
-
----
-
-### 좌석 예약 요청 API
-
-#### 기능 설명
-
-- 사용자가 좌석 예약을 요청하면 해당 좌석을 일정 시간 동안 임시 배정합니다.
-- 임시 배정 시간 내에 결제가 이루어지지 않으면 배정이 해제됩니다.
-- 임시 배정된 좌석은 다른 사용자가 예약할 수 없습니다.
-
-#### 흐름도
-
-```mermaid
-flowchart TD
-    A[사용자 요청] --> B{좌석 예약 가능 여부 확인}
-    B -- 가능 --> C[좌석 임시 배정 및 타이머 시작]
-    C --> D[응답 반환]
-    B -- 불가능 --> E[에러 응답 반환]
-```
-
-#### 시퀀스 다이어그램
-
-```mermaid
-sequenceDiagram
-    participant User
-    participant API_Server
-    participant Database
-    participant Timer_Service
 
     User->>API_Server: 좌석 예약 요청
     API_Server->>Database: 좌석 예약 가능 여부 확인
-    Database-->>API_Server: 예약 가능
-    API_Server->>Database: 좌석 임시 배정 상태로 변경
-    API_Server->>Timer_Service: 임시 배정 타이머 시작 (예: 5분)
-    API_Server-->>User: 예약 성공 응답
-
-    Timer_Service-->>API_Server: 타이머 만료 알림
-    API_Server->>Database: 좌석 임시 배정 해제
-```
-
----
-
-### 잔액 충전 / 조회 API
-
-#### 기능 설명
-
-- 사용자가 결제에 사용될 금액을 충전합니다.
-- 사용자의 현재 잔액을 조회합니다.
-
-#### 흐름도
-
-```mermaid
-flowchart TD
-    A[사용자 요청] --> B{충전 또는 조회 선택}
-    B -- 충전 --> C[금액 입력]
-    C --> D[잔액 충전 처리]
-    D --> E[응답 반환]
-    B -- 조회 --> F[잔액 조회]
-    F --> E[응답 반환]
-```
-
-#### 시퀀스 다이어그램 (충전)
-
-```mermaid
-sequenceDiagram
-    participant User
-    participant API_Server
-    participant Database
-
-    User->>API_Server: 잔액 충전 요청 (금액 입력)
-    API_Server->>Database: 사용자 잔액 업데이트
-    Database-->>API_Server: 업데이트 결과
-    API_Server-->>User: 충전 완료 응답
-```
-
-#### 시퀀스 다이어그램 (조회)
-
-```mermaid
-sequenceDiagram
-    participant User
-    participant API_Server
-    participant Database
-
-    User->>API_Server: 잔액 조회 요청
-    API_Server->>Database: 사용자 잔액 조회
-    Database-->>API_Server: 잔액 정보 반환
-    API_Server-->>User: 잔액 정보 응답
-```
-
----
-
-### 결제 API
-
-#### 기능 설명
-
-- 임시 배정된 좌석에 대해 결제를 진행합니다.
-- 결제 완료 시 좌석의 소유권이 사용자에게 배정되고, 대기열 토큰이 만료됩니다.
-
-#### 흐름도
-
-```mermaid
-flowchart TD
-    A[사용자 요청] --> B{잔액 충분 여부 확인}
-    B -- 충분 --> C[결제 처리 및 좌석 소유권 배정]
-    C --> D[대기열 토큰 만료]
-    D --> E[응답 반환]
-    B -- 부족 --> F[에러 응답 반환]
-```
-
-#### 시퀀스 다이어그램
-
-```mermaid
-sequenceDiagram
-    participant User
-    participant API_Server
-    participant Database
-    participant Queue_System
+    
+    alt 좌석 예약 가능
+        Database-->>API_Server: 예약 가능
+        API_Server->>Database: 좌석 임시 배정
+        API_Server->>Timer_Service: 임시 배정 타이머 시작 (5분)
+        API_Server-->>User: 임시 예약 성공 응답
+    else 좌석 예약 불가능
+        Database-->>API_Server: 예약 불가능
+        API_Server-->>User: 예약 불가 응답
+    end
 
     User->>API_Server: 결제 요청
-    API_Server->>Database: 사용자 잔액 및 임시 배정 좌석 확인
-    Database-->>API_Server: 확인 결과
-    API_Server->>Database: 결제 처리 (잔액 차감, 좌석 소유권 변경)
-    API_Server->>Queue_System: 대기열 토큰 만료 처리
-    API_Server-->>User: 결제 완료 응답
+    API_Server->>Database: 사용자 잔액 및 좌석 확인
+    
+    alt 잔액 충분
+        Database-->>API_Server: 잔액 확인 완료
+        API_Server->>Database: 결제 처리 및 잔액 차감
+        API_Server->>Database: 좌석 소유권 부여
+        API_Server->>Queue_System: 대기열 토큰 만료 처리
+        API_Server-->>User: 결제 완료 응답
+    else 잔액 부족
+        Database-->>API_Server: 잔액 부족
+        API_Server-->>User: 잔액 부족 응답
+    end
+
+    Timer_Service-->>API_Server: 임시 배정 타이머 만료
+    API_Server->>Database: 임시 배정 해제
+    Database-->>API_Server: 좌석 상태 변경 완료
 ```
 
 ---
 
-## 동시성 이슈 및 대기열 처리 방안
+## 3. 프로젝트 구조
 
-- **대기열 시스템 구현**
-    - Redis의 Sorted Set을 이용하여 대기열 관리
-    - 사용자 요청 시 대기열에 추가되고, 순서에 따라 토큰 발급
+### 프로젝트 기본 정보
 
+- **Language**: Kotlin
+- **Framework**: Spring Boot 3.3.4
+- **Database**: PostgreSQL, H2 (for testing)
+- **ORM**: Spring Data JPA, QueryDSL
+- **Caching**: Redis
+- **Message Queue**: Kafka (event streaming)
+- **Build Tool**: Gradle
+- **Java Version**: 21
 
-- **동시성 이슈 해결**
-    - 좌석 예약 시 데이터베이스에서 비관적 락 사용
-    - 임시 배정 타이머는 Redis의 TTL 기능 활용
-    - 결제 처리 시 원자성 보장을 위한 트랜잭션 적용
+### 패키지 구조
 
-
-- **다수 인스턴스 환경 지원**
-    - Redis를 통한 세션 및 대기열 상태 공유
-    - 로드 밸런서를 이용한 트래픽 분산
+```
+rest_server
+ ┣ admin                        # 어드민 관련 기능 (콘서트 관리, 사용자 관리 등)
+ ┣ application                  # 애플리케이션 레이어 (파서드 로직)
+ ┣ config                       # 설정 파일 (QueryDSL, Redis, Security 등)
+ ┃ ┗ QueryDslConfig.kt          
+ ┣ domain                       # 도메인 레이어 (각 도메인의 비즈니스 로직)
+ ┃ ┣ auth                       # 인증 관련 도메인 (유저, 토큰)
+ ┃ ┣ concert                    # 콘서트 관련 도메인 (콘서트 정보, 좌석 정보)
+ ┃ ┃ ┗ seat                     # 좌석 관련 도메인 (좌석 예약, 좌석 상태)
+ ┃ ┣ payment                    # 결제 관련 도메인 (결제, 결제 내역)
+ ┃ ┗ user                       # 사용자 관련 도메인 (사용자 정보, 잔액)
+ ┣ interfaces                   # 프레젠테이션 레이어 (API 및 DTO)
+ ┃ ┣ api                        # API 컨트롤러
+ ┃ ┃ ┗ concert                  # 콘서트 관련 API 컨트롤러
+ ┃ ┗ dto                        # DTO 클래스 (요청/응답 정의)
+ ┗ RestServerApplication.kt     # 애플리케이션 엔트리 포인트
+```
 
 ---
 
-## 단위 테스트
+## 4. API 명세
 
-- **각 기능별 단위 테스트 작성**
-    - 유저 토큰 발급 및 대기열 관리 테스트
-    - 예약 가능 날짜 및 좌석 조회 테스트
-    - 좌석 예약 요청 및 임시 배정 테스트
-    - 잔액 충전 및 조회 테스트
-    - 결제 처리 및 좌석 소유권 배정 테스트
-  
+| **Method** | **Endpoint**                                      | **Description**                               | **Request Body**                                               | **Response Example**                                      | **Error Example**                                                                                         |
+|------------|---------------------------------------------------|------------------------------------------------|---------------------------------------------------------------|-----------------------------------------------------------|-----------------------------------------------------------------------------------------------------------|
+| `POST`     | `/api/v1/token`                                   | 유저 대기열 토큰 발급                           | `{ "userId": "123e4567-e89b-12d3-a456-426614174000" }`          | `{ "result": "success", "body": { "token": "JWT_TOKEN", "queuePosition": 1, "estimatedWaitTime": 120 } }` | `{ "result": "error", "body": { "code": 404, "message": "User not found." } }`                           |
+| `GET`      | `/api/v1/seats/dates`                             | 예약 가능한 날짜 목록 조회                      | N/A                                                           | `{ "result": "success", "body": { "dates": ["2024-10-15", "2024-10-16", "2024-10-17"] } }`   | `{ "result": "error", "body": { "code": 500, "message": "Failed to retrieve available dates." } }`       |
+| `GET`      | `/api/v1/seats/available?date=2024-10-15`         | 특정 날짜의 예약 가능한 좌석 조회               | N/A                                                           | `{ "result": "success", "body": { "date": "2024-10-15", "availableSeats": [1, 2, 3, 5, 10, 20] } }` | `{ "result": "error", "body": { "code": 404, "message": "No seats available for the selected date." } }` |
+| `POST`     | `/api/v1/seats/reserve`                           | 특정 좌석 임시 예약 요청                         | `{ "userId": "123e4567-e89b-12d3-a456-426614174000", "date": "2024-10-15", "seat": 5 }` | `{ "result": "success", "body": { "status": "reserved", "seatNumber": 5, "expiresIn": 300 } }` | `{ "result": "error", "body": { "code": 409, "message": "Seat is already reserved." } }`                 |
+| `POST`     | `/api/v1/users/{userId}/balance/charge`           | 사용자 잔액 충전                                | `{ "amount": 10000 }`                                         | `{ "result": "success", "body": { "userId": "123e4567-e89b-12d3-a456-426614174000", "newBalance": 20000 } }` | `{ "result": "error", "body": { "code": 400, "message": "Invalid charge amount." } }`                    |
+| `GET`      | `/api/v1/users/{userId}/balance`                  | 사용자 잔액 조회                                | N/A                                                           | `{ "result": "success", "body": { "userId": "123e4567-e89b-12d3-a456-426614174000", "balance": 15000 } }` | `{ "result": "error", "body": { "code": 404, "message": "User not found." } }`                           |
+| `POST`     | `/api/v1/seats/payment`                           | 결제 요청                                      | `{ "userId": "123e4567-e89b-12d3-a456-426614174000", "date": "2024-10-15", "seat": 5 }` | `{ "result": "success", "body": { "status": "paid", "userId": "123e4567-e89b-12d3-a456-426614174000", "seatNumber": 5, "amount": 5000, "paidAt": "2024-10-15T14:00:00Z" } }` | `{ "result": "error", "body": { "code": 400, "message": "Insufficient balance." } }`                      |
+| `DELETE`   | `/api/v1/seats/cancel`                           | 좌석 임시 예약 취소 요청                        | `{ "userId": "123e4567-e89b-12d3-a456-426614174000", "date": "2024-10-15", "seat": 5 }` | `{ "result": "success", "body": { "status": "canceled", "seatNumber": 5, "canceledAt": "2024-10-15T10:02:00Z" } }` | `{ "result": "error", "error": { "code": 404, "message": "Reservation not found." } }`                    |
+| `GET`      | `/api/v1/concerts`                                | 예약 가능한 콘서트 목록 조회                     | N/A                                                           | `{ "result": "success", "body": { "concerts": [ { "concertId": "c1", "title": "Spring Festival", "description": "A spring concert for all", "availableDates": ["2024-10-15", "2024-10-16"] } ] } }` | `{ "result": "error", "body": { "code": 500, "message": "Failed to retrieve concerts." } }`              |
+| `GET`      | `/api/v1/concerts/{concertId}/reservations?userId=123e4567-e89b-12d3-a456-426614174000` | 사용자의 예약된 좌석 목록 조회 | N/A | `{ "result": "success", "body": { "concertId": "c1", "userId": "123e4567-e89b-12d3-a456-426614174000", "reservations": [{ "seatNumber": 5, "status": "paid", "reservedAt": "2024-10-15T10:00:00Z", "expiresAt": "2024-10-15T10:05:00Z" }] } }` | `{ "result": "error", "body": { "code": 404, "message": "No reservations found for this concert." } }`   |
 
-- **동시성 시나리오 테스트**
-    - 다수의 사용자들이 동시에 좌석 예약을 시도하는 상황 시뮬레이션
-    - 임시 배정 시간 만료 후 다른 사용자가 예약할 수 있는지 확인
-  
+---
+
+## 5. ERD 설계 자료
+
+### ERD 다이어그램
+
+```mermaid
+erDiagram
+   CONCERT {
+      UUID id PK
+      STRING title
+      STRING description
+   }
+
+   SEAT {
+      UUID id PK
+      INT seat_number
+      UUID concert_id FK
+      UUID user_id FK
+      DATE reservation_date
+      STRING status "AVAILABLE/RESERVED/PAID"
+      DATETIME reserved_at
+   }
+
+   USER {
+      UUID id PK
+      STRING username
+      STRING email
+      LONG balance
+   }
+
+   TOKEN {
+      UUID id PK
+      UUID user_id FK
+      STRING token
+      DATETIME issued_at
+      DATETIME expires_at
+   }
+
+   PAYMENT {
+      UUID id PK
+      UUID user_id FK
+      UUID seat_id FK
+      LONG amount
+      DATETIME paid_at
+   }
+
+   CONCERT ||--o{ SEAT : "좌석을 가지는"
+   USER ||--o{ TOKEN : "토큰 발급"
+   USER ||--o{ PAYMENT : "결제 진행"
+   USER ||--o{ SEAT : "좌석 예약"
+   SEAT ||--o{ PAYMENT : "결제와 연결"
+```
+
+### 설명
+
+- **CONCERT**: 콘서트 정보를 관리하는 엔티티입니다.
+- **SEAT**: 각 콘서트의 날짜별 좌석 정보를 저장합니다.
+- **USER**: 사용자 정보를 관리하며, 잔액 정보를 포함합니다.
+- **TOKEN**: 사용자 대기열 상태를 관리하기 위한 토큰 정보입니다.
+- **PAYMENT**: 좌석 예약과 관련된 결제 내역을 관리합니다.
+
 ---
