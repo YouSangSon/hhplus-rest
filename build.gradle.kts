@@ -5,7 +5,7 @@ plugins {
     id("io.spring.dependency-management") version "1.1.6"
     id("org.asciidoctor.jvm.convert") version "3.3.2"
     kotlin("plugin.jpa") version "1.9.25"
-    kotlin("kapt") version "2.0.20"
+    kotlin("kapt") version "1.9.25"
 }
 
 group = "yousang"
@@ -27,9 +27,11 @@ repositories {
     mavenCentral()
 }
 
-extra["snippetsDir"] = file("build/generated-snippets")
+//extra["snippetsDir"] = file("build/generated-snippets")
+//
+//val queryDslVersion: String by extra
 
-val queryDslVersion: String by extra
+//val querydslVersion = "5.0.0"
 
 dependencies {
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
@@ -41,6 +43,13 @@ dependencies {
     implementation("org.jetbrains.kotlin:kotlin-reflect")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-reactor")
     implementation("org.springframework.kafka:spring-kafka")
+    implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.1.0")
+    implementation("io.github.oshai:kotlin-logging-jvm:7.0.0")
+    implementation("org.apache.tomcat.embed:tomcat-embed-core")
+    implementation("io.jsonwebtoken:jjwt-api:0.12.6")
+    implementation("io.jsonwebtoken:jjwt-impl:0.12.6")
+    implementation("io.jsonwebtoken:jjwt-jackson:0.12.6")
+    implementation("org.springframework.boot:spring-boot-starter-validation")
     compileOnly("org.projectlombok:lombok")
     developmentOnly("org.springframework.boot:spring-boot-devtools")
     runtimeOnly("com.h2database:h2")
@@ -62,27 +71,27 @@ dependencies {
     kapt("jakarta.persistence:jakarta.persistence-api")
 }
 
-// Querydsl 설정부 추가 - start
-val generated = file("src/main/generated")
-
-// querydsl QClass 파일 생성 위치를 지정
-tasks.withType<JavaCompile> {
-    options.generatedSourceOutputDirectory.set(generated)
-}
-
-// kotlin source set 에 querydsl QClass 위치 추가
-sourceSets {
-    main {
-        kotlin.srcDirs += generated
-    }
-}
-
-// gradle clean 시에 QClass 디렉토리 삭제
-tasks.named("clean") {
-    doLast {
-        generated.deleteRecursively()
-    }
-}
+//// Querydsl 설정부 추가 - start
+//val generated = file("src/main/generated")
+//
+//// querydsl QClass 파일 생성 위치를 지정
+//tasks.withType<JavaCompile> {
+//    options.generatedSourceOutputDirectory.set(generated)
+//}
+//
+//// kotlin source set 에 querydsl QClass 위치 추가
+//sourceSets {
+//    main {
+//        kotlin.srcDirs += generated
+//    }
+//}
+//
+////// gradle clean 시에 QClass 디렉토리 삭제
+//tasks.named("clean") {
+//    doLast {
+//        generated.deleteRecursively()
+//    }
+//}
 
 kotlin {
     compilerOptions {
@@ -94,11 +103,11 @@ tasks.withType<Test> {
     useJUnitPlatform()
 }
 
-tasks.test {
-    outputs.dir(project.extra["snippetsDir"]!!)
-}
-
-tasks.asciidoctor {
-    inputs.dir(project.extra["snippetsDir"]!!)
-    dependsOn(tasks.test)
-}
+//tasks.test {
+//    outputs.dir(project.extra["snippetsDir"]!!)
+//}
+//
+//tasks.asciidoctor {
+//    inputs.dir(project.extra["snippetsDir"]!!)
+//    dependsOn(tasks.test)
+//}

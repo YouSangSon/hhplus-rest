@@ -1,3 +1,6 @@
 spring:
   application:
     name: rest_server
+jwt:
+  secret-key: 22ece4d20d0fe232061454dad7986cdbed704921b5cd54cce7dcb0591f104baa7155795f55fe1884cc06635d58b92705cbe1500846dad7f27b7d4aceeee83af0
+  access-token-expire-time: 3600000
