@@ -1,8 +1,11 @@
 package yousang.rest_server.common.domain.models
 
-import jakarta.persistence.*
-import yousang.rest_server.domains.user.domain.models.UserEntity
-import java.util.*
+import jakarta.persistence.Column
+import jakarta.persistence.Embeddable
+import jakarta.persistence.Embedded
+import jakarta.persistence.MappedSuperclass
+import jakarta.persistence.PrePersist
+import jakarta.persistence.PreUpdate
 
 @MappedSuperclass
 abstract class BaseEntity {
@@ -17,24 +20,30 @@ abstract class BaseEntity {
     @PrePersist
     protected fun onCreate() {
         createdAt = System.currentTimeMillis()
-
-        // UserEntity의 경우 uuid 설정
-        if (this is UserEntity && this.uuid == null) {
-            this.uuid = UUID.randomUUID()
-        }
     }
 
     @PreUpdate
     protected fun onUpdate() {
         updatedAt = System.currentTimeMillis()
     }
+
+    @Embedded
+    var deletion: Deletion = Deletion()
+
+    open fun softDelete() {
+        deletion.delete()
+    }
+
+    open fun softRestore() {
+        deletion.restore()
+    }
 }
 
 @Embeddable
-open class Deletion {
+class Deletion {
     @Column(name = "deleted_at")
     var deletedAt: Long? = null
-        protected set
+        private set
 
     fun delete() {
         deletedAt = System.currentTimeMillis()

@@ -13,36 +13,41 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 @Configuration
 @EnableWebSecurity
 class SecurityConfig(
-    private val jwtTokenFilter: JwtTokenFilter
+    private val jwtTokenProvider: JwtTokenProvider,
+    private val customUserDetailsService: CustomUserDetailsService
 ) {
-    @Bean
-    fun securityFilterChain(http: HttpSecurity): SecurityFilterChain {
-        http.csrf { it.disable() }  // Disable CSRF as we are using JWT (stateless)
-            .cors{} // Enable CORS, you can customize the allowed origins if needed
-            .sessionManagement { session ->
-                session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)  // Stateless sessions
-            }.authorizeHttpRequests { auth ->
-                auth.requestMatchers(*ALLOWED_URLS).permitAll()  // Public endpoints
-                    .anyRequest().authenticated()  // All other endpoints require authentication
-            }.addFilterBefore(jwtTokenFilter, UsernamePasswordAuthenticationFilter::class.java)  // Add JWT filter
-
-        return http.build()
-    }
-
     @Bean
     fun authenticationManager(authenticationConfiguration: AuthenticationConfiguration): AuthenticationManager {
         return authenticationConfiguration.authenticationManager
     }
 
-    companion object {
-        private val ALLOWED_URLS = arrayOf(
-            "",
-            "/api/v1/users/register",
-            "/api/v1/users/login",
-            "/swagger-ui/**",
-            "/css/**",
-            "/images/**",
-            "/js/**",
-        )
+    @Bean
+    fun securityFilterChain(http: HttpSecurity, jwtAuthenticationFilter: JwtAuthenticationFilter): SecurityFilterChain {
+        http
+            .cors { it.configure(http) }
+            .csrf { it.disable() }
+            .httpBasic { it.disable() }
+            .formLogin { it.disable() }
+            .sessionManagement { session ->
+                session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+            }
+            .authorizeHttpRequests { authorize ->
+                authorize
+                    .requestMatchers(
+                        "/api/users/register",
+                        "/api/users/login",
+                        "/api/users/refresh",
+                        "/v3/api-docs/**",
+                        "/swagger-ui/**",
+                        "/swagger-resources/**",
+                        "/configuration/**",
+                        "/webjars/**",
+                        "/public"
+                    ).permitAll()
+                    .anyRequest().authenticated()
+            }
+            .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter::class.java)
+
+        return http.build()
     }
 }

@@ -1,33 +1,37 @@
 package yousang.rest_server.domains.queue.interfaces.api
 
 import org.springframework.http.ResponseEntity
-import org.springframework.web.bind.annotation.*
-import yousang.rest_server.common.dto.Response
+import org.springframework.security.core.context.SecurityContextHolder
+import org.springframework.web.bind.annotation.GetMapping
+import org.springframework.web.bind.annotation.PostMapping
+import org.springframework.web.bind.annotation.RequestMapping
+import org.springframework.web.bind.annotation.RestController
+import yousang.rest_server.common.interfaces.dto.Response
 import yousang.rest_server.domains.queue.application.QueueFacade
-import yousang.rest_server.domains.queue.interfaces.dto.QueueDto
-import yousang.rest_server.security.JwtTokenProvider
+import yousang.rest_server.security.CustomUserDetails
 
 @RestController
 @RequestMapping("/api/v1/queue")
 class QueueController(
     private val queueFacade: QueueFacade,
-    private val jwtTokenProvider: JwtTokenProvider
 ) {
-    @PostMapping("/issue-token")
-    fun issueQueueToken(@RequestParam userId: Long): ResponseEntity<Response<String>> {
-        val (user, queue) = queueFacade.findUserAndQueue(userId)
-        val token = jwtTokenProvider.createQueueToken(user.uuid, queue)
+    @PostMapping("/join")
+    fun joinQueue(): ResponseEntity<Response<Any>> {
+        val authentication = SecurityContextHolder.getContext().authentication
+        val userDetails = authentication.principal as CustomUserDetails
 
-        return ResponseEntity.ok(Response("Success", token))
+        val result = queueFacade.joinQueue(userDetails.userId)
+
+        return ResponseEntity.ok(Response("success", data = result))
     }
 
-    @GetMapping("/status")
-    fun getQueueStatus(@RequestHeader("Authorization") authHeader: String): ResponseEntity<Response<QueueDto>> {
-        val token = authHeader.replace("Bearer ", "")
-        val claims = jwtTokenProvider.getClaims(token)
-        val queuePosition = claims["queuePosition"] as Int
-        val expiredAt = claims["expiredAt"] as Long
+    @GetMapping("/position")
+    fun getQueuePosition(): ResponseEntity<Response<Any>> {
+        val authentication = SecurityContextHolder.getContext().authentication
+        val userDetails = authentication.principal as CustomUserDetails
 
-        return ResponseEntity.ok(Response("Success", QueueDto(queuePosition, expiredAt)))
+        val result = queueFacade.getQueuePosition(userDetails.userId)
+
+        return ResponseEntity.ok(Response("success", data = result))
     }
 }
